@@ -1,0 +1,6 @@
+# sampling (Linux + NVIDIA GPU); vLLM pulls a matching torch. Triton needs a C compiler (apt install gcc).
+vllm==0.30.0
+math-verify
+safetensors
+huggingface_hub
+numpy
