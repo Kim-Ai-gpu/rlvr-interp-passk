@@ -13,13 +13,19 @@ evaluated under Yue et al.'s exact protocol (Qwen2.5-7B ↔ SimpleRL-Zoo-7B, qwe
 pass@k (%), math-verify grading. `python -m interp_passk.score --results results/qwen25-7b-simplerl-zoo/mathverify` prints every k
 with paired bootstrap CIs; `results/qwen25-7b-simplerl-zoo/yue_grader` is the same samples regraded with Yue et al.'s grader.
 
-| model | MATH500 @1 | MATH500 @128 | Minerva @1 | Minerva @128 | Olympiad @1 | Olympiad @128 |
-|---|---|---|---|---|---|---|
-| Qwen2.5-7B (base) | 62.5 | **96.4** | 24.9 | **65.1** | 28.1 | 75.6 |
-| α = 0.25 | 75.5 | 95.8 | 33.3 | **65.1** | 37.1 | **75.7** |
-| α = 0.5 | 77.0 | 95.4 | **35.7** | 59.2 | 40.3 | 74.8 |
-| α = 0.75 | **78.7** | 94.6 | 35.3 | 58.1 | 42.0 | 73.9 |
-| SimpleRL-Zoo-7B (RL) | **78.7** | 94.2 | 35.6 | 56.3 | **42.3** | 71.4 |
+Each cell is pass@1 / pass@k at the largest k (128; AMC23 and AIME24 1024). Bold = best in the row.
+
+| benchmark | Qwen2.5-7B (base) | α = 0.25 | α = 0.5 | α = 0.75 | SimpleRL-Zoo-7B (RL) |
+|---|---|---|---|---|---|
+| MATH500 ‡ | 62.5 / **96.4** | 75.5 / 95.8 | 77.0 / 95.4 | **78.7** / 94.6 | **78.7** / 94.2 |
+| Minerva † | 24.9 / **65.1** | 33.3 / **65.1** | **35.7** / 59.2 | 35.3 / 58.1 | 35.6 / 56.3 |
+| OlympiadBench † | 28.1 / 75.6 | 37.1 / **75.7** | 40.3 / 74.8 | 42.0 / 73.9 | **42.3** / 71.4 |
+| GSM8K ‡ | 85.2 / **99.2** | 90.0 / 98.5 | 91.1 / 98.1 | 91.7 / 97.7 | **92.2** / 97.5 |
+| AMC23 ‡ | 36.2 / **100** | 45.7 / **100** | 54.5 / **100** | 55.8 / **100** | **55.9** / **100** |
+| AIME24 | 8.2 / 70.0 | 12.5 / 73.3 | 14.2 / 66.7 | **15.6** / 73.3 | 14.6 / **76.7** |
+
+† judged benchmarks (base ≥ RL at the largest k, both endpoints ≤ 95%). ‡ saturated at the largest k (an endpoint
+> 95%), reported only. AIME24 has no crossover (RL ≥ base; 30 problems, so one problem = 3.3 points).
 
 - The base > RL crossover at large k reproduces on 5 of 6 benchmarks (pass@1 within ±2 points of Yue et al.).
 - The pre-registered "rescue" test fails: no α beats **both** endpoints by +1 point on the non-saturated benchmarks.
