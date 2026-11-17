@@ -1,8 +1,9 @@
 """Build W(alpha) = W_base + alpha * (W_rl - W_base), tensor by tensor (low RAM).
 
 Mixing happens in fp32 and the result is saved in fp16 by default. Do NOT save or serve interpolations in bf16: an RLVR
-update is often about one bf16 ULP of the base weights, so bf16 rounding erases most of it (in our 0.5B check, alpha
-0.25 kept 29% of the intended update). Config and tokenizer files are copied from the RL model. Outputs over 5 GB are
+update is smaller than one bf16 step of the base weights, so bf16 rounding erases most of it (in our check on
+Qwen2.5-Math-1.5B <-> Oat-Zero-1.5B, |W_rl - W_base| / |W_base| was 0.0007 and alpha 0.25 kept 29% of the intended
+update; fp16 kept all of it). Config and tokenizer files are copied from the RL model. Outputs over 5 GB are
 sharded with a model.safetensors.index.json. A base model with a tied lm_head is handled (embed_tokens used as W0).
 
   python -m interp_passk.interpolate --base Qwen/Qwen2.5-7B --rl hkust-nlp/Qwen-2.5-7B-SimpleRL-Zoo \
