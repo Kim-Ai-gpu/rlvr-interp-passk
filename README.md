@@ -1,4 +1,7 @@
-# Base ↔ RLVR weight interpolation for large-k pass@k
+# Mix Your Base and RLVR Weights: A Training-Free Knob for Diversity
+
+Code and results for the paper *Mix Your Base and RLVR Weights: A Training-Free Knob for Diversity*
+(Youngseong Kim; preprint coming soon on arXiv).
 
 RLVR-trained models beat their base model at pass@1 but lose at large k ([Yue et al., 2025](https://arxiv.org/abs/2504.13837)).
 This repository tests a training-free knob: the linear weight interpolation
