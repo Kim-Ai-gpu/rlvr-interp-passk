@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mix Your Base and RLVR Weights</title>
+<meta name="description" content="Linearly interpolating the weights of a base model and its RLVR policy gives a single training-free knob between pass@1 and pass@k.">
+<meta property="og:title" content="Mix Your Base and RLVR Weights: A Training-Free Knob for Diversity">
+<meta property="og:description" content="One number, no training: interpolate base and RLVR weights to trade pass@1 for pass@k.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23256ABF'/%3E%3Cpath d='M16 16 L16 5' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="hero">
+  <h1>Mix Your Base and RLVR Weights:<br>A Training-Free Knob for Diversity</h1>
+  <p class="authors">Youngseong Kim</p>
+  <p class="affils">Independent Researcher</p>
+  <div class="links">
+    <span class="soon" aria-disabled="true" id="paper-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>
+      Paper <em>(coming soon)</em></span>
+    <a href="https://github.com/Kim-Ai-gpu/rlvr-interp-passk" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/></svg>
+      Code &amp; per-sample results</a>
+  </div>
+</header>
+
+<p class="tldr">RLVR makes a model better at its first try but worse at exploring.
+One number, <span class="m">α</span>, mixes the weights back toward the base model, with <b>no training</b> and <b>one model to serve</b>.</p>
+
+<!-- ======================= teaser animation ======================= -->
+<section id="teaser" aria-label="Animated overview">
+  <div class="chapters" role="tablist" aria-label="Chapter">
+    <button role="tab" data-ch="0" aria-selected="true"><span class="n">1</span>The problem</button>
+    <button role="tab" data-ch="1" aria-selected="false"><span class="n">2</span>Mix the weights</button>
+    <button role="tab" data-ch="2" aria-selected="false"><span class="n">3</span>Inside one token</button>
+    <button role="tab" data-ch="3" aria-selected="false"><span class="n">4</span>The payoff</button>
+  </div>
+  <div class="frame" id="frame">
+    <svg id="stage" viewBox="0 0 1600 900" role="img" aria-label="Animation: interpolating base and RLVR weights"></svg>
+    <span class="paused">Paused · click to play</span>
+  </div>
+  <div class="progress" id="progress"><div id="bar"></div></div>
+  <div class="note">Click the figure to pause, or a chapter to jump. Token probabilities in chapter 3 are the worked example of Section 3.2; curves in chapter 4 are measured (Minerva).</div>
+</section>
+
+<section class="abstract" id="abstract">
+  <p class="kicker">Abstract</p>
+  <p>As test-time scaling (TTS) emerges as a new scaling axis, a model's sample diversity (pass@<span class="m">k</span> at large <span class="m">k</span>) has
+  become as important as its single-sample accuracy (pass@1) in the many applications that combine a verifier with multiple reasoning traces.
+  Reinforcement learning with verifiable rewards (RLVR), however, improves pass@1 while narrowing this diversity (Yue et al., 2025),
+  which makes test-time scaling less sample-efficient.
+  We apply WiSE-FT-style weight interpolation, <span class="m">W</span>(<span class="m">α</span>) = <span class="m">W</span><sub>base</sub> + <span class="m">α</span>(<span class="m">W</span><sub>RL</sub> − <span class="m">W</span><sub>base</sub>),
+  as a single training-free knob that trades pass@1 for pass@<span class="m">k</span>.
+  Under the experimental setup of Yue et al. (Qwen2.5-7B and SimpleRL-Zoo-7B on six math benchmarks), <span class="m">α</span> = 0.25 recovers the base
+  model's large-<span class="m">k</span> coverage (pass@128 of 70.4 vs. 70.3 for the base model and 63.8 for RL, averaged over the two non-saturated
+  benchmarks) while keeping 64–80% of the RL pass@1 gain, and it reaches the RL model's pass@128 with <strong>2.3–7.1× fewer samples</strong>.
+  <span class="m">α</span> = 0.5 strikes a balance (pass@1 −1.2 and large-<span class="m">k</span> pass@<span class="m">k</span> +1.6 points relative to RL), and
+  <span class="m">α</span> = 0.75 is nearly a free lunch (RL-level pass@1 with OlympiadBench pass@128 +2.5).
+  The coverage reached at <span class="m">α</span> = 0.25 exceeds what the RL model reaches at any sampling temperature reported for this pair.</p>
+</section>
+
+<!-- ======================= results ======================= -->
+<div class="section-head" id="results">
+  <h2>Results</h2>
+  <p>Interactive versions of the paper's main results. Hover over any line, point, or bar for exact values.</p>
+</div>
+
+<div class="res">
+
+  <!-- pass@k curves -->
+  <div class="res-card" id="card-passk">
+    <h3>pass@<span class="m">k</span> along the path from base to RLVR</h3>
+    <p class="sub">RLVR wins at <span class="m">k</span> = 1 and loses at large <span class="m">k</span>. Interpolated models sit in between, and
+      <span class="m">α</span> = 0.25 tracks the upper envelope at large <span class="m">k</span>.</p>
+    <div class="res-ctrl"><span class="lbl">Benchmark</span><div class="seg" id="pk-bench"></div></div>
+    <div class="res-ctrl"><span class="lbl">View</span><div class="seg" id="pk-view">
+      <button data-v="abs" aria-pressed="true">pass@k</button><button data-v="diff" aria-pressed="false">vs. RLVR (points)</button></div></div>
+    <svg id="pk-svg" viewBox="0 0 1000 440"></svg>
+    <div class="res-legend" id="pk-legend"></div>
+    <p class="res-note">Minerva and OlympiadBench are the main benchmarks; on GSM8K and MATH500 every model is above 94% at <span class="m">k</span> = 128.
+      The dotted vertical line marks <span class="m">k</span> = 32, where estimates switch to a second sampling stage (paper, Appendix A).</p>
+  </div>
+
+  <!-- trade-off -->
+  <div class="res-card" id="card-trade">
+    <h3>The trade-off as a knob</h3>
+    <p class="sub">Each model is a point: pass@1 against pass@128. Press play to turn <span class="m">α</span> from the base model to the RLVR policy.</p>
+    <div class="res-ctrl"><span class="lbl">Benchmark</span><div class="seg" id="tr-bench"></div></div>
+    <div class="steps">
+      <button class="pill" id="tr-back">← Back</button>
+      <div class="pips" id="tr-pips"></div>
+      <button class="pill" id="tr-next">Next →</button>
+      <button class="pill" id="tr-play">▶ Play</button>
+    </div>
+    <div class="readout" id="tr-readout"></div>
+    <svg id="tr-svg" viewBox="0 0 1000 470"></svg>
+    <div class="res-legend">
+      <span><i style="border-color:#9a9aa0"></i>Interpolation path</span>
+      <span><i class="dash" style="border-color:#8e8e93"></i>Mixture of base and RLVR samples</span>
+      <span><i class="dot" style="border-color:var(--warm)"></i>RLVR at higher <span class="m">T</span> (Yue et al., 2025)</span>
+    </div>
+    <p class="res-note">The dashed curve mixes samples of the two endpoints in every proportion at 128 samples in total.
+      The dotted line is the RLVR policy's pass@128 at an entropy-matched higher temperature, read from Yue et al. (2025), Fig. 18.</p>
+  </div>
+
+  <!-- samples to target -->
+  <div class="res-card" id="card-samples">
+    <h3>Samples needed to match RLVR</h3>
+    <p class="sub">With a verifier, coverage costs samples. Smallest number of samples per problem at which each model reaches the RLVR policy's pass@<span class="m">k</span>.</p>
+    <div class="res-ctrl"><span class="lbl">Target</span><div class="seg" id="sm-target">
+      <button data-v="pass128" aria-pressed="true">RLVR pass@128</button><button data-v="pass32" aria-pressed="false">RLVR pass@32</button></div></div>
+    <div class="readout" id="sm-readout"></div>
+    <svg id="sm-svg" viewBox="0 0 1000 400"></svg>
+    <div class="res-legend" id="sm-legend"></div>
+    <p class="res-note">Read the ratios with care: the RLVR policy's pass@<span class="m">k</span> curve is flat at large <span class="m">k</span>, so small differences in pass@<span class="m">k</span> become large differences in the required <span class="m">k</span>.
+      The base model also needs few samples, but on OlympiadBench, Minerva, and MATH500 its pass@1 is 8 to 13 points lower than that of <span class="m">α</span> = 0.25.
+      AMC23 and AIME24 are omitted because of their size (40 and 30 problems).</p>
+  </div>
+
+  <!-- token-level demo -->
+  <div class="res-card" id="card-token">
+    <h3>Why mixing is not the same as heating</h3>
+    <p class="sub">To first order, the interpolated model's next-token distribution is a weighted product of the two models,
+      <span class="m">π<sub>α</sub></span> ∝ <span class="m">π</span><sub>0</sub><sup>1−<span class="m">α</span></sup> <span class="m">π</span><sub>1</sub><sup><span class="m">α</span></sup>.
+      Temperature rescales the RLVR policy alone, <span class="m">π</span><sub>1</sub><sup>1/<span class="m">T</span></sup>.
+      Move the sliders on the worked example from the paper.</p>
+    <div class="sliders">
+      <div class="slider"><label for="tk-a">Interpolation <span><span class="m">α</span> = <b id="tk-a-v">0.50</b></span></label>
+        <input type="range" id="tk-a" min="0" max="1" step="0.01" value="0.5"></div>
+      <div class="slider warm"><label for="tk-t">Temperature on RLVR <span><span class="m">T</span> = <b id="tk-t-v">2.00</b></span></label>
+        <input type="range" id="tk-t" min="0.5" max="3" step="0.01" value="2"></div>
+    </div>
+    <div class="readout" id="tk-readout"></div>
+    <svg id="tk-svg" viewBox="0 0 1000 340"></svg>
+    <div class="res-legend">
+      <span><i class="sq" style="background:var(--a0)"></i>Base <span class="m">π</span><sub>0</sub></span>
+      <span><i class="sq" style="background:var(--a100)"></i>RLVR <span class="m">π</span><sub>1</sub></span>
+      <span><i class="sq" style="background:var(--a50)"></i>Interpolated <span class="m">π<sub>α</sub></span></span>
+      <span><i class="sq" style="background:var(--warm)"></i>RLVR at temperature <span class="m">T</span></span>
+    </div>
+    <p class="res-note">A toy distribution over three tokens (paper, Section 3.2), not measured outputs. The geometric mixture is a first-order approximation; its error vanishes at both endpoints.</p>
+  </div>
+
+  <!-- which alpha -->
+  <div class="res-card" id="card-uses">
+    <h3>Which <span class="m">α</span> should I use?</h3>
+    <p class="sub">Recommendations from the 7B pair. On a new pair, treat them as a starting point to confirm.</p>
+    <div class="uses">
+      <div class="use"><p class="a">0.25</p><h4><span class="sw" style="background:var(--a25)"></span>Verifier, many samples</h4>
+        <p>Base-level pass@128 with 64–80% of the RLVR pass@1 gain; RLVR's pass@128 with 2.3–7.1× fewer samples.</p></div>
+      <div class="use"><p class="a">0.5</p><h4><span class="sw" style="background:var(--a50)"></span>Balance</h4>
+        <p>Pass@1 −1.2 and large-<span class="m">k</span> pass@<span class="m">k</span> +1.6 points relative to RLVR.</p></div>
+      <div class="use"><p class="a">0.75</p><h4><span class="sw" style="background:var(--a75)"></span>Small gain at no cost</h4>
+        <p>Pass@1 −0.2, pass@<span class="m">k</span> +1.0; OlympiadBench pass@128 +2.5.</p></div>
+      <div class="use"><p class="a">1 <small>or 0.75</small></p><h4><span class="sw" style="background:var(--a100)"></span>No verifier</h4>
+        <p>Under majority voting, interpolation does not improve on the RLVR policy.</p></div>
+    </div>
+    <details>
+      <summary>Show full results table</summary>
+      <div class="tblwrap"><table id="main-table"></table></div>
+      <p class="res-note">pass@1 / pass@<span class="m">k</span> at the largest <span class="m">k</span> (%), math-verify grading. The largest <span class="m">k</span> is 128, except 1024 for AMC23 and AIME24.</p>
+    </details>
+  </div>
+</div>
+
+<div class="section-head" id="limits">
+  <h2>What it does not do</h2>
+  <p>Stated up front in the paper.</p>
+</div>
+<div class="prose">
+  <ul>
+    <li><b>No new abilities.</b> No interpolated model beats both endpoints; most of the effect matches a mixture of samples from the two models, but from a single model.</li>
+    <li><b>Needs a verifier.</b> Under majority voting, interpolation does not improve on the RLVR policy.</li>
+    <li><b>Narrow scope.</b> One pair of 7B models, math only, one sampling seed.</li>
+    <li><b>Needs the base model.</b> The weights RLVR started from must be public.</li>
+    <li><b>Use fp16 or fp32.</b> The RLVR update is small; bf16 rounding erases most of it (in a check on a 1.5B pair, only 29% survived at <span class="m">α</span> = 0.25).</li>
+  </ul>
+</div>
+
+<div class="section-head" id="cite"><h2>Citation</h2></div>
+<div class="bib">
+  <button class="pill" id="copy-bib">Copy</button>
+<pre id="bibtex">@misc{kim2026mix,
+  title  = {Mix Your Base and RLVR Weights: A Training-Free Knob for Diversity},
+  author = {Kim, Youngseong},
+  year   = {2026},
+  note   = {Preprint}
+}</pre>
+</div>
+
+<footer>Code, per-sample answers, and scores: <a href="https://github.com/Kim-Ai-gpu/rlvr-interp-passk">github.com/Kim-Ai-gpu/rlvr-interp-passk</a></footer>
+
+<div class="tip" id="tip"></div>
+<script src="assets/data.js"></script>
+<script src="assets/teaser.js"></script>
+<script src="assets/charts.js"></script>
+</body>
+</html>
