@@ -1,8 +1,9 @@
 # Mix Your Base and RLVR Weights: A Training-Free Knob for Diversity
 
 Code and results for the paper *Mix Your Base and RLVR Weights: A Training-Free Knob for Diversity*
-(Youngseong Kim; preprint coming soon).
+(Youngseong Kim, 2026).
 
+**Paper:** https://www.preprints.org/manuscript/202611.2034 (doi:[10.20944/preprints202611.2034.v1](https://doi.org/10.20944/preprints202611.2034.v1))
 **Project page:** https://kim-ai-gpu.github.io/rlvr-interp-passk/ (animated overview and interactive results)
 
 RLVR-trained models beat their base model at pass@1 but lose at large k ([Yue et al., 2025](https://arxiv.org/abs/2504.13837)).
@@ -102,5 +103,20 @@ Notes
 - `sample.py` uses a fork process pool for grading (Linux). Stage-2 requests go in chunks of 128 samples so an
   interruption loses little; restarts use a fresh engine seed.
 - Each 7B model is about 2.3e8 generated tokens under this protocol (~5–6 h on one H100 SXM with vLLM 0.30, fp16).
+
+## Citation
+
+```bibtex
+@article{202611.2034,
+	doi = {10.20944/preprints202611.2034.v1},
+	url = {https://doi.org/10.20944/preprints202611.2034.v1},
+	year = 2026,
+	month = {November},
+	publisher = {Preprints},
+	author = {Youngseong Kim},
+	title = {Mix Your Base and RLVR Weights: A Training-Free Knob for Diversity},
+	journal = {Preprints}
+}
+```
 
 License: MIT (see LICENSE).
