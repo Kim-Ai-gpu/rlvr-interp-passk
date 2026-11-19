@@ -21,7 +21,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=8">
 </head>
 <body>
 
@@ -55,7 +56,7 @@ One number, <span class="m">α</span>, mixes the weights back toward the base mo
     <span class="paused">Paused · click to play</span>
   </div>
   <div class="progress" id="progress"><div id="bar"></div></div>
-  <div class="note">Click the figure to pause, or a chapter to jump. Token probabilities in chapter 3 are the worked example of Section 3.2; curves in chapter 4 are measured (Minerva).</div>
+  <div class="note">Click the figure to pause, or a chapter to jump. Chapter 1 shows real samples (MATH500, problem 204); token probabilities in chapter 3 are the worked example of Section 3.2; curves in chapter 4 are measured (Minerva).</div>
 </section>
 
 <section class="abstract" id="abstract">
@@ -81,6 +82,19 @@ One number, <span class="m">α</span>, mixes the weights back toward the base mo
 </div>
 
 <div class="res">
+
+  <!-- answer explorer (real samples) -->
+  <div class="res-card" id="card-answers">
+    <h3>What collapse looks like</h3>
+    <p class="sub">Real final answers from 128 samples per model, on hard problems where the RLVR policy never answers correctly.
+      Each color is one distinct answer; <span style="color:var(--good);font-weight:700">green</span> is correct.</p>
+    <div class="res-ctrl"><span class="lbl">Problem</span><div class="seg" id="ex-prob"></div></div>
+    <div class="qbox"><div id="ex-q"></div><div class="gold">Correct answer: <span id="ex-gold"></span></div></div>
+    <div class="readout" id="ex-readout"></div>
+    <div class="ex-rows" id="ex-rows"></div>
+    <div class="ex-legend" id="ex-legend"></div>
+    <p class="res-note" id="ex-note"></p>
+  </div>
 
   <!-- pass@k curves -->
   <div class="res-card" id="card-passk">
@@ -206,8 +220,9 @@ One number, <span class="m">α</span>, mixes the weights back toward the base mo
 <footer>Code, per-sample answers, and scores: <a href="https://github.com/Kim-Ai-gpu/rlvr-interp-passk">github.com/Kim-Ai-gpu/rlvr-interp-passk</a></footer>
 
 <div class="tip" id="tip"></div>
-<script src="assets/data.js"></script>
-<script src="assets/teaser.js"></script>
-<script src="assets/charts.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="assets/data.js?v=8"></script>
+<script src="assets/teaser.js?v=8"></script>
+<script src="assets/charts.js?v=8"></script>
 </body>
 </html>

@@ -72,8 +72,12 @@
   for (let i = 0; i < N * N; i++) { const b = r(); W0.push(b); W1.push(clamp(b * 0.5 + r() * 0.5)); }
   const baseCol = (v) => mix('#e3eefc', COL.a0, v);
   const rlCol = (v) => mix('#4d82c9', COL.a100, v);
-  const ANS = { base: ['12', '7', '√2', '12', '3/4', '9', '5', '12'], rl: ['12', '12', '12', '12', '12', '12', '9', '12'] };
-  const CORRECT = '5';
+  // chapter 1 uses real samples (stage 2) of one MATH500 problem, exported by site/build_data.py
+  const EXP = D.explorer.problems.find((p) => p.teaser);
+  const EXCOL = ['#2E7D3A', '#C8642A', '#8e8e93', '#c9b79c', '#a7b4c2', '#d6cfc4', '#ececef'];
+  const EXTOP = EXP.models.zoo.counts.reduce((b, v, j) => (j > 0 && v > b[1] ? [j, v] : b), [1, -1]);   // [category, count]
+  CAPTIONS[1][2] = `On a hard MATH500 problem, RLVR answers ${EXP.cats[EXTOP[0]].label} in ${EXTOP[1]} of 128 samples; ` +
+    `the base model finds the right answer, ${EXP.cats[0].label}, ${EXP.models.base.c} times.`;
   const ALPHAS = [0, 0.25, 0.5, 0.75, 1], ACOL = [COL.a0, COL.a25, COL.a50, COL.a75, COL.a100];
   const P0 = [0.59, 0.40, 0.01], P1 = [0.98, 0.01, 0.01];
   const norm = (v) => { const s = v.reduce((a, b) => a + b, 0); return v.map((x) => x / s); };
@@ -84,12 +88,12 @@
   /* ---------- layouts ---------- */
   const LAND = {
     vb: '0 0 1600 900', f: 1,
-    c1: { base: [420, 330], rl: [1180, 330], s: 1 },
+    c1: { base: [420, 230], rl: [1180, 230], s: 0.9 },
     c2: { base: [300, 360], rl: [1300, 360], mid: [800, 360], s: 0.82, sMid: 0.82 },
     cardFont: [30, 22], cardText: true,
-    arrow: { x0: 600, x1: 1000, y: 330, label: [['RLVR training', 795, 310]] },
-    samp: { titleY: 624, titles: ['8 samples on one hard problem', '8 samples on the same problem'], rows: 1, chipY: 668, chipW: 52, chipH: 44, chipGap: 8, chipFont: 22,
-      verdictY: 738, verdicts: ['✓ solved: one sample is correct', '✗ not solved: the same wrong answer'], fs: 22 },
+    arrow: { x0: 600, x1: 1000, y: 230, label: [['RLVR training', 795, 210]] },
+    samp: { titleY: 506, titles: ['128 samples on one MATH500 problem', '128 samples on the same problem'], verdictY: 540, fs: 22,
+      cols: 16, gap: 22, r: 8, gridY: 572 },
     formula: { x: 800, y: 112, size: 50 },
     extLabels: false,
     slider: { x0: 560, x1: 1040, y: 690, tickFont: 22, knobFont: 26 },
@@ -105,8 +109,8 @@
     c2: { base: [150, 410], rl: [750, 410], mid: [450, 410], s: 0.52, sMid: 0.74 },
     cardFont: [40, 30], cardText: true,
     arrow: { x0: 372, x1: 528, y: 300, label: [['RLVR', 450, 246], ['training', 450, 280]] },
-    samp: { titleY: 576, titles: ['8 samples, one hard problem', '8 samples, same problem'], rows: 2, chipY: 638, chipW: 62, chipH: 50, chipGap: 10, chipFont: 27,
-      verdictY: 772, verdicts: ['✓ solved (1 of 8)', '✗ not solved'], fs: 27 },
+    samp: { titleY: 560, titles: ['128 samples, MATH500 #204', '128 samples, same problem'], verdictY: 600, fs: 24,
+      cols: 16, gap: 25, r: 9.5, gridY: 636 },
     formula: { x: 450, y: 120, size: 42 },
     extLabels: true,
     slider: { x0: 150, x1: 750, y: 760, tickFont: 28, knobFont: 34 },
@@ -174,25 +178,18 @@
     // ch1: sampled answers
     const SP = L.samp;
     S.samples = el('g', {});
-    function chips(cx, list) {
-      const out = [], perRow = list.length / SP.rows;
-      const total = perRow * SP.chipW + (perRow - 1) * SP.chipGap;
-      list.forEach((a, i) => {
-        const col = i % perRow, row = Math.floor(i / perRow);
-        const g = el('g', { transform: `translate(${cx - total / 2 + col * (SP.chipW + SP.chipGap) + SP.chipW / 2}, ${SP.chipY + row * (SP.chipH + 12)})` }, S.samples);
-        const ok = a === CORRECT;
-        el('rect', { x: -SP.chipW / 2, y: -SP.chipH / 2, width: SP.chipW, height: SP.chipH, rx: 10, fill: ok ? '#eef8f0' : COL.soft, stroke: ok ? COL.good : COL.line, 'stroke-width': ok ? 3 : 1.5 }, g);
-        const t = el('text', { x: 0, y: SP.chipFont * 0.36, 'text-anchor': 'middle', 'font-size': SP.chipFont, fill: ok ? COL.good : COL.ink, 'font-weight': ok ? 700 : 400 }, g);
-        t.textContent = a;
-        out.push(g);
-      });
-      return out;
+    // 128 real samples per model as a 16 x 8 grid of dots, one color per distinct final answer (green = correct)
+    function dots(cx, seq) {
+      const w = (SP.cols - 1) * SP.gap;
+      return seq.map((cat, i) => el('circle', { cx: cx - w / 2 + (i % SP.cols) * SP.gap, cy: SP.gridY + Math.floor(i / SP.cols) * SP.gap, r: SP.r,
+        fill: EXCOL[cat], stroke: cat >= 3 ? '#d4d4d8' : 'none', 'stroke-width': 1 }, S.samples));
     }
     const cxB = L.c1.base[0], cxR = L.c1.rl[0];
+    const mb = EXP.models.base, mz = EXP.models.zoo;
     S.sampTitles = [label(S.samples, cxB, SP.titleY, SP.titles[0], { 'font-size': SP.fs, fill: COL.ink }), label(S.samples, cxR, SP.titleY, SP.titles[1], { 'font-size': SP.fs, fill: COL.ink })];
-    S.chipsB = chips(cxB, ANS.base); S.chipsR = chips(cxR, ANS.rl);
-    S.verdicts = [label(S.samples, cxB, SP.verdictY, SP.verdicts[0], { 'font-size': SP.fs + 1, fill: COL.good, 'font-weight': 700 }),
-      label(S.samples, cxR, SP.verdictY, SP.verdicts[1], { 'font-size': SP.fs + 1, fill: COL.warm, 'font-weight': 700 })];
+    S.chipsB = dots(cxB, mb.seq); S.chipsR = dots(cxR, mz.seq);
+    S.verdicts = [label(S.samples, cxB, SP.verdictY, `${mb.c} correct · ${mb.distinct} different answers`, { 'font-size': SP.fs, fill: COL.good, 'font-weight': 700 }),
+      label(S.samples, cxR, SP.verdictY, `0 correct · ${EXTOP[1]} of 128 say ${EXP.cats[EXTOP[0]].label}`, { 'font-size': SP.fs, fill: COL.warm, 'font-weight': 700 })];
 
     // ch2: formula + slider
     const F = L.formula;
@@ -316,9 +313,9 @@
 
     set(S.samples, { opacity: 1 - seg(t, 6.8, 7.4) });
     S.sampTitles.forEach((n) => n.setAttribute('opacity', seg(t, 3.4, 3.9)));
-    S.chipsB.forEach((g, i) => g.setAttribute('opacity', seg(t, 3.8 + i * 0.22, 4.0 + i * 0.22)));
-    S.chipsR.forEach((g, i) => g.setAttribute('opacity', seg(t, 3.8 + i * 0.22, 4.0 + i * 0.22)));
-    S.verdicts.forEach((n) => n.setAttribute('opacity', seg(t, 5.8, 6.2)));
+    S.chipsB.forEach((g, i) => g.setAttribute('opacity', seg(t, 3.7 + i * 0.014, 3.9 + i * 0.014)));
+    S.chipsR.forEach((g, i) => g.setAttribute('opacity', seg(t, 3.7 + i * 0.014, 3.9 + i * 0.014)));
+    S.verdicts.forEach((n) => n.setAttribute('opacity', seg(t, 5.7, 6.1)));
 
     // alpha path for chapter 2
     let a = 0;

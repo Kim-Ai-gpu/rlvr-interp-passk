@@ -242,6 +242,68 @@
   sa.addEventListener('input', drawTK); st.addEventListener('input', drawTK);
   drawTK();
 
+  /* ======================= 0. answer explorer (real samples) ======================= */
+  const EX = D.explorer;
+  const EXCOL = ['#2E7D3A', '#C8642A', '#8e8e93', '#c9b79c', '#a7b4c2', '#d6cfc4', '#ececef'];   // correct, wrong 1..5, other
+  const EXLIGHT = [false, false, false, true, true, true, true];
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const tex = (s, display) => { try { return window.katex ? katex.renderToString(s, { throwOnError: false, displayMode: !!display }) : esc(s); } catch (e) { return esc(s); } };
+  function richText(s) {   // plain text with $...$, $$...$$, \[...\], \(...\) math
+    const re = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\$([^$]+?)\$|\\\(([\s\S]+?)\\\)/g;
+    let out = '', last = 0, m;
+    while ((m = re.exec(s))) {
+      out += esc(s.slice(last, m.index));
+      out += m[1] || m[2] ? tex(m[1] || m[2], true) : tex(m[3] || m[4], false);
+      last = re.lastIndex;
+    }
+    return out + esc(s.slice(last));
+  }
+  const ansHTML = (c) => (c.other ? 'other answers' : c.label === '(no answer)' ? 'no answer' : tex(c.label));
+  const ex = { i: 0 };
+  const exSeg = document.getElementById('ex-prob');
+  EX.problems.forEach((p, i) => {
+    const b = document.createElement('button'); b.dataset.v = String(i); b.textContent = `${p.benchName} #${p.pid}`; exSeg.appendChild(b);
+  });
+  segmented('ex-prob', null, '0', (v) => { ex.i = +v; drawEX(); });
+  const rowsBox = document.getElementById('ex-rows');
+  const exRows = ARMS.map((a) => {
+    const row = document.createElement('div'); row.className = 'ex-row';
+    const [nm, al] = { base: ['Base', '0'], a25: ['Interpolated', '0.25'], a50: ['Interpolated', '0.5'], a75: ['Interpolated', '0.75'], zoo: ['RLVR', '1'] }[a];
+    row.innerHTML = `<div class="ex-name"><span class="${nm === 'Interpolated' ? 'full' : ''}">${nm}</span><small><span class="m">α</span> = ${al}</small></div><div class="ex-bar"></div><div class="ex-stat"></div>`;
+    rowsBox.appendChild(row);
+    const bar = row.querySelector('.ex-bar');
+    const segs = EXCOL.map((c, j) => { const s = document.createElement('div'); s.className = 'ex-seg' + (EXLIGHT[j] ? ' light' : ''); s.style.background = c; s.style.flexBasis = '0%'; bar.appendChild(s); return s; });
+    return { segs, stat: row.querySelector('.ex-stat') };
+  });
+  function drawEX() {
+    const p = EX.problems[ex.i];
+    document.getElementById('ex-q').innerHTML = richText(p.q);
+    document.getElementById('ex-gold').innerHTML = tex(p.cats[0].label);
+    ARMS.forEach((a, r) => {
+      const m = p.models[a];
+      exRows[r].segs.forEach((s, j) => {
+        const n = m.counts[j] || 0, cat = p.cats[j];
+        s.style.flexBasis = (n / m.n * 100) + '%';
+        s.textContent = n / m.n >= 0.07 ? n : '';
+        s.onmouseenter = (e) => { tip.innerHTML = `<b>${ANAME[a]}</b><br>${cat ? ansHTML(cat) : ''} <span class="k">·</span> <b>${n}</b> of ${m.n} samples${cat && cat.ok ? ' <span class="k">(correct)</span>' : ''}`; tip.style.opacity = n ? 1 : 0; moveTip(e); };
+        s.onmousemove = moveTip; s.onmouseleave = () => { tip.style.opacity = 0; };
+      });
+      exRows[r].stat.innerHTML = `<b class="${m.c ? 'ok' : ''}">${m.c}</b> / ${m.n} correct<br><span>${m.distinct} distinct<span class="long"> answer${m.distinct === 1 ? '' : 's'}</span></span>`;
+    });
+    document.getElementById('ex-legend').innerHTML = p.cats.map((c, j) => `<span><i style="background:${EXCOL[j]}"></i>${ansHTML(c)}${c.ok ? ' (correct)' : ''}</span>`).join('');
+    const z = p.models.zoo, top = z.counts.slice(1).reduce((b, v, j) => (v > z.counts[b + 1] ? j : b), 0) + 1;
+    const pb = p.models.base, pa = p.models.a25;
+    document.getElementById('ex-readout').innerHTML =
+      `RLVR answered ${ansHTML(p.cats[top])} in <span class="warm">${z.counts[top]} of ${z.n}</span> samples and was never right (0 of ${z.n1 + z.n} in total). ` +
+      `The base model was right in <b>${pb.c}</b>, and <span class="m">α</span> = 0.25 in <span class="good">${pa.c}</span>.`;
+  }
+  const cv = EX.coverage;
+  document.getElementById('ex-note').innerHTML =
+    `Hand-picked to show what collapse looks like, not a summary statistic. For a fair count: over all ${cv.problems.toLocaleString('en')} problems of the six benchmarks, ` +
+    `<span class="m">α</span> = 0.25 solves ${cv.a25_only} problems at the largest <span class="m">k</span> that RLVR never solves, and RLVR solves ${cv.zoo_only_vs_a25} that <span class="m">α</span> = 0.25 never solves. ` +
+    `Stage-2 samples (paper, Appendix A); correctness by math-verify. Answers are grouped by their exact written form.`;
+  drawEX();
+
   /* ======================= main table + misc ======================= */
   const tbl = document.getElementById('main-table');
   let html = '<tr><th>Benchmark</th>' + ARMS.map((a) => `<th>${ANAME[a]}</th>`).join('') + '</tr>';
