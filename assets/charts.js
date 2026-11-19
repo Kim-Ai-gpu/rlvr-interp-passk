@@ -318,7 +318,9 @@
 
   segmented('try-tab', null, 'script', (v) => document.querySelectorAll('.code[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== v; }));
   document.querySelectorAll('.code .copy').forEach((b) => b.addEventListener('click', () => {
-    const txt = b.parentElement.querySelector('pre').textContent;
+    const pre = b.closest('.code').querySelector('pre').cloneNode(true);
+    pre.querySelectorAll('.p').forEach((n) => n.remove());          // drop the "$ " prompts
+    const txt = pre.textContent;
     navigator.clipboard.writeText(txt).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1400); }, () => {});
   }));
 

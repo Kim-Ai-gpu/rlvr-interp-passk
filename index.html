@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-<link rel="stylesheet" href="assets/style.css?v=9">
+<link rel="stylesheet" href="assets/style.css?v=10">
 </head>
 <body>
 
@@ -200,30 +200,30 @@ One number, <span class="m">α</span>, mixes the weights back toward the base mo
   <div class="res-ctrl"><div class="seg" id="try-tab">
     <button data-v="script" aria-pressed="true">Our script (streams, low RAM)</button><button data-v="hf" aria-pressed="false">Plain transformers</button></div></div>
   <div class="code" data-pane="script">
-    <button class="pill copy">Copy</button>
+    <div class="titlebar"><span class="lights"><i></i><i></i><i></i></span><span class="ttl">zsh — rlvr-interp-passk</span><button class="copy">Copy</button></div>
 <pre><span class="c"># CPU is fine: tensors are mixed one at a time in fp32 and saved in fp16</span>
-git clone https://github.com/Kim-Ai-gpu/rlvr-interp-passk && cd rlvr-interp-passk
-pip install torch safetensors huggingface_hub
+<span class="p">$ </span>git clone https://github.com/Kim-Ai-gpu/rlvr-interp-passk && cd rlvr-interp-passk
+<span class="p">$ </span>pip install torch safetensors huggingface_hub
 
-python -m interp_passk.interpolate \
+<span class="p">$ </span>python -m interp_passk.interpolate \
     --base Qwen/Qwen2.5-7B --rl hkust-nlp/Qwen-2.5-7B-SimpleRL-Zoo \
     --alpha 0.25 0.75 --out models          <span class="c"># -> models/a25, models/a75</span>
 
-vllm serve models/a25 --dtype float16      <span class="c"># serve like any other checkpoint</span></pre>
+<span class="p">$ </span>vllm serve models/a25 --dtype float16      <span class="c"># serve like any other checkpoint</span></pre>
   </div>
   <div class="code" data-pane="hf" hidden>
-    <button class="pill copy">Copy</button>
-<pre>import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+    <div class="titlebar"><span class="lights"><i></i><i></i><i></i></span><span class="ttl">mix.py</span><button class="copy">Copy</button></div>
+<pre><span class="k">import</span> torch
+<span class="k">from</span> transformers <span class="k">import</span> AutoModelForCausalLM, AutoTokenizer
 
-base_id, rl_id, alpha = "Qwen/Qwen2.5-7B", "hkust-nlp/Qwen-2.5-7B-SimpleRL-Zoo", 0.25
+base_id, rl_id, alpha = <span class="s">"Qwen/Qwen2.5-7B"</span>, <span class="s">"hkust-nlp/Qwen-2.5-7B-SimpleRL-Zoo"</span>, <span class="n">0.25</span>
 model = AutoModelForCausalLM.from_pretrained(base_id, dtype=torch.float32)
 rl = AutoModelForCausalLM.from_pretrained(rl_id, dtype=torch.float32).state_dict()
-with torch.no_grad():
-    for name, w in model.state_dict().items():
+<span class="k">with</span> torch.no_grad():
+    <span class="k">for</span> name, w <span class="k">in</span> model.state_dict().items():
         w.add_(alpha * (rl[name] - w))           <span class="c"># W_base + alpha (W_RL - W_base)</span>
-model.half().save_pretrained("mixed-a25")        <span class="c"># fp16 or fp32, never bf16</span>
-AutoTokenizer.from_pretrained(rl_id).save_pretrained("mixed-a25")</pre>
+model.half().save_pretrained(<span class="s">"mixed-a25"</span>)        <span class="c"># fp16 or fp32, never bf16</span>
+AutoTokenizer.from_pretrained(rl_id).save_pretrained(<span class="s">"mixed-a25"</span>)</pre>
     <p class="res-note" style="text-align:left">Holds both models in fp32 at once (about 60 GB of RAM for a 7B pair); the script on the other tab streams instead.</p>
   </div>
   <ul class="try-notes">
@@ -262,8 +262,8 @@ AutoTokenizer.from_pretrained(rl_id).save_pretrained("mixed-a25")</pre>
 
 <div class="tip" id="tip"></div>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-<script src="assets/data.js?v=9"></script>
-<script src="assets/teaser.js?v=9"></script>
-<script src="assets/charts.js?v=9"></script>
+<script src="assets/data.js?v=10"></script>
+<script src="assets/teaser.js?v=10"></script>
+<script src="assets/charts.js?v=10"></script>
 </body>
 </html>
