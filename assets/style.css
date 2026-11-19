@@ -163,5 +163,10 @@ footer { text-align: center; color: var(--faint); font-size: 12.5px; margin: 72p
   .tldr { font-size: 1.05rem; }
   .abstract p:not(.kicker) { text-align: left; }
 }
+@media (max-width: 640px) {
+  .frame svg { aspect-ratio: 900 / 1040; }
+  .frame .caption { padding-bottom: 30px; }
+  .frame .paused { top: auto; bottom: 6px; }
+}
 @media (max-width: 420px) { .uses { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

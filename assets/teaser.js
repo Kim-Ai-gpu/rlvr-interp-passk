@@ -1,4 +1,5 @@
-/* Teaser: a scripted SVG explainer. render(t) is a pure function of time, so chapters and the progress bar can seek. */
+/* Teaser: a scripted SVG explainer. render(t) is a pure function of time, so chapters and the progress bar can seek.
+   Two layouts: landscape (1600x900) and portrait (900x1040, phones). The scene is rebuilt when the layout changes. */
 (function () {
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.getElementById('stage');
@@ -7,6 +8,7 @@
   const progress = document.getElementById('progress');
   const chapterBtns = [...document.querySelectorAll('.chapters button')];
   const D = window.PAPER_DATA;
+  const MQ = window.matchMedia('(max-width: 640px)');
 
   const COL = { a0: '#86B6EF', a25: '#3987E5', a50: '#256ABF', a75: '#184F95', a100: '#0D366B', warm: '#C8642A',
     ink: '#1d1d1f', muted: '#6e6e73', faint: '#a1a1a6', line: '#e3e3e6', soft: '#f5f5f7', good: '#2E7D3A' };
@@ -63,213 +65,294 @@
   ];
   let capNow = -1;
 
-  /* =============== chapter 1 + 2: model cards =============== */
+  /* ---------- static data shared by both layouts ---------- */
   const N = 7, CELL = 34, GAP = 4, GW = N * CELL + (N - 1) * GAP;
   const r = rng(7);
   const W0 = [], W1 = [];
   for (let i = 0; i < N * N; i++) { const b = r(); W0.push(b); W1.push(clamp(b * 0.5 + r() * 0.5)); }
   const baseCol = (v) => mix('#e3eefc', COL.a0, v);
   const rlCol = (v) => mix('#4d82c9', COL.a100, v);
-
-  function card(name, sub) {
-    const g = el('g', {});
-    el('rect', { x: -160, y: -160, width: 320, height: 320, rx: 22, fill: '#fff', stroke: COL.line, 'stroke-width': 2 }, g);
-    const cells = [];
-    for (let i = 0; i < N * N; i++) {
-      const x = -GW / 2 + (i % N) * (CELL + GAP), y = -GW / 2 + Math.floor(i / N) * (CELL + GAP);
-      cells.push(el('rect', { x, y, width: CELL, height: CELL, rx: 6 }, g));
-    }
-    const t1 = label(g, 0, 205, name, { 'font-size': 30, fill: COL.ink, 'font-weight': 700 });
-    const t2 = label(g, 0, 240, sub, { 'font-size': 22 });
-    return { g, cells, t1, t2 };
-  }
-  const cBase = card('Base model', 'Qwen2.5-7B');
-  const cRL = card('RLVR policy', 'SimpleRL-Zoo-7B');
-  const cMid = card('', '');
-  cBase.cells.forEach((c, i) => c.setAttribute('fill', baseCol(W0[i])));
-  cRL.cells.forEach((c, i) => c.setAttribute('fill', rlCol(W1[i])));
-  const midName = math(cMid.g, 0, 210, 40, [['W', 'i'], ['(', 'r'], ['α', 'i'], [')', 'r']], { 'text-anchor': 'middle' });
-  const midSub = label(cMid.g, 0, 244, 'one model', { 'font-size': 22 });
-  const tagBase = label(cBase.g, 0, -184, 'α = 0', { 'font-size': 32, class: 'serif', 'font-style': 'italic', fill: COL.ink });
-  const tagRL = label(cRL.g, 0, -184, 'α = 1', { 'font-size': 32, class: 'serif', 'font-style': 'italic', fill: COL.ink });
-
-  // ch1: training arrow
-  const arrow = el('g', {});
-  const arrowLine = el('path', { d: 'M 600 330 L 990 330', stroke: COL.muted, 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round', 'stroke-dasharray': 400, 'stroke-dashoffset': 400 }, arrow);
-  const arrowHead = el('path', { d: 'M 975 316 L 1000 330 L 975 344', stroke: COL.muted, 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, arrow);
-  const arrowTxt = label(arrow, 795, 310, 'RLVR training', { 'font-size': 26, fill: COL.ink });
-
-  // ch1: sampled answers
   const ANS = { base: ['12', '7', '√2', '12', '3/4', '9', '5', '12'], rl: ['12', '12', '12', '12', '12', '12', '9', '12'] };
   const CORRECT = '5';
-  const samples = el('g', {});
-  function chips(cx, list) {
-    const out = [];
-    const w = 52, gap = 8, total = list.length * w + (list.length - 1) * gap;
-    list.forEach((a, i) => {
-      const g = el('g', { transform: `translate(${cx - total / 2 + i * (w + gap) + w / 2}, 668)` }, samples);
-      const ok = a === CORRECT;
-      el('rect', { x: -w / 2, y: -22, width: w, height: 44, rx: 10, fill: ok ? '#eef8f0' : COL.soft, stroke: ok ? COL.good : COL.line, 'stroke-width': ok ? 3 : 1.5 }, g);
-      const t = el('text', { x: 0, y: 8, 'text-anchor': 'middle', 'font-size': 22, fill: ok ? COL.good : COL.ink, 'font-weight': ok ? 700 : 400 }, g);
-      t.textContent = a;
-      out.push(g);
-    });
-    return out;
-  }
-  const sampTitleB = label(samples, 420, 624, '8 samples on one hard problem', { 'font-size': 22, fill: COL.ink });
-  const sampTitleR = label(samples, 1180, 624, '8 samples on the same problem', { 'font-size': 22, fill: COL.ink });
-  const chipsB = chips(420, ANS.base), chipsR = chips(1180, ANS.rl);
-  const verdictB = label(samples, 420, 738, '✓ solved: one sample is correct', { 'font-size': 23, fill: COL.good, 'font-weight': 700 });
-  const verdictR = label(samples, 1180, 738, '✗ not solved: the same wrong answer', { 'font-size': 23, fill: COL.warm, 'font-weight': 700 });
-
-  // ch2: formula + slider
-  const formula = math(svg, 800, 112, 50, [['W', 'i'], ['(', 'r'], ['α', 'i'], [') = ', 'r'], ['W', 'i'], ['base', 'sub'], [' + ', 'r'], ['α', 'i'],
-    [' (', 'r'], ['W', 'i'], ['RL', 'sub'], [' − ', 'r'], ['W', 'i'], ['base', 'sub'], [')', 'r']], { 'text-anchor': 'middle' });
-  const slider = el('g', {});
-  const SX0 = 560, SX1 = 1040, SY = 690;
-  el('line', { x1: SX0, x2: SX1, y1: SY, y2: SY, stroke: COL.line, 'stroke-width': 8, 'stroke-linecap': 'round' }, slider);
-  const fill = el('line', { x1: SX0, x2: SX0, y1: SY, y2: SY, stroke: COL.a50, 'stroke-width': 8, 'stroke-linecap': 'round' }, slider);
   const ALPHAS = [0, 0.25, 0.5, 0.75, 1], ACOL = [COL.a0, COL.a25, COL.a50, COL.a75, COL.a100];
-  const ticks = ALPHAS.map((a, i) => {
-    const x = lerp(SX0, SX1, a);
-    const dot = el('circle', { cx: x, cy: SY, r: 6, fill: '#fff', stroke: ACOL[i], 'stroke-width': 3 }, slider);
-    const t = label(slider, x, SY + 46, String(a), { 'font-size': 22 });
-    return { dot, t };
-  });
-  const knob = el('circle', { cx: SX0, cy: SY, r: 17, fill: '#fff', stroke: COL.a50, 'stroke-width': 5 }, slider);
-  const knobTxt = label(slider, SX0, SY - 34, '', { 'font-size': 26, class: 'serif', 'font-style': 'italic', fill: COL.ink });
-
-  /* =============== chapter 3: token bars =============== */
-  const tok = el('g', {});
   const P0 = [0.59, 0.40, 0.01], P1 = [0.98, 0.01, 0.01];
   const norm = (v) => { const s = v.reduce((a, b) => a + b, 0); return v.map((x) => x / s); };
   const geo = (a) => norm(P0.map((p, i) => p ** (1 - a) * P1[i] ** a));
   const temp = (T) => norm(P1.map((p) => p ** (1 / T)));
-  const BY = 700, BH = 430, BW = 58, BG = 12, GXS = [470, 800, 1130];
-  const TOKS = [['A', 'both models like it'], ['B', 'base likes it, RLVR removed it'], ['D', 'neither model supports it']];
-  const hiB = el('rect', { x: GXS[1] - 160, y: BY - BH - 20, width: 320, height: BH + 120, rx: 18, fill: '#eef4fc', opacity: 0 }, tok);
-  const hiD = el('rect', { x: GXS[2] - 160, y: BY - BH - 20, width: 320, height: BH + 120, rx: 18, fill: '#fbeee6', opacity: 0 }, tok);
-  el('line', { x1: 300, x2: 1300, y1: BY, y2: BY, stroke: '#c7c7cc', 'stroke-width': 2 }, tok);
-  const BCOL = [COL.a0, COL.a100, COL.a50, COL.warm];
-  const bars = TOKS.map(([name, desc], g) => {
-    const gx = GXS[g], x0 = gx - (4 * BW + 3 * BG) / 2;
-    const bs = BCOL.map((c, j) => {
-      const rect = el('rect', { x: x0 + j * (BW + BG), y: BY, width: BW, height: 0, rx: 5, fill: c }, tok);
-      const t = el('text', { x: x0 + j * (BW + BG) + BW / 2, y: BY - 8, 'text-anchor': 'middle', 'font-size': 19, fill: COL.ink, opacity: 0 }, tok);
-      return { rect, t };
-    });
-    math(tok, gx, BY + 52, 46, [[name, 'i']], { 'text-anchor': 'middle' });
-    label(tok, gx, BY + 86, desc, { 'font-size': 20 });
-    return bs;
-  });
-  const tokLegend = el('g', { transform: 'translate(300, 150)' }, tok);
-  [['Base', COL.a0], ['RLVR', COL.a100], ['Interpolated (α)', COL.a50], ['RLVR at temperature T', COL.warm]].forEach(([s, c], i) => {
-    const g = el('g', { transform: `translate(${[0, 130, 280, 520][i]}, 0)` }, tokLegend);
-    el('rect', { x: 0, y: -16, width: 20, height: 20, rx: 4, fill: c }, g);
-    const t = el('text', { x: 30, y: 1, 'font-size': 21, fill: COL.muted }, g); t.textContent = s;
-  });
-  const tokFormula = math(tok, 1300, 95, 42, [['π', 'i'], ['α', 'subi'], [' ∝ ', 'r'], ['π', 'i'], ['0', 'sub'], ['1−α', 'supi'], [' ', 'r'], ['π', 'i'], ['1', 'sub'], ['α', 'supi']], { 'text-anchor': 'end' });
-  const tokA = label(tok, 1300, 150, '', { 'font-size': 22, 'text-anchor': 'end', class: 'serif', 'font-style': 'italic', fill: COL.a50 });
-  const tokT = label(tok, 1300, 182, '', { 'font-size': 22, 'text-anchor': 'end', class: 'serif', 'font-style': 'italic', fill: COL.warm });
-
-  /* =============== chapter 4: pass@k curves (measured, Minerva) =============== */
-  const pk = el('g', {});
   const M = D.passk.minerva_math;
-  const PX0 = 300, PX1 = 1280, PY0 = 700, PY1 = 140, YMIN = 20, YMAX = 70;
-  const px = (k) => PX0 + Math.log2(k) / 7 * (PX1 - PX0);
-  const py = (v) => PY0 - (v - YMIN) / (YMAX - YMIN) * (PY0 - PY1);
-  for (let v = 20; v <= 70; v += 10) {
-    el('line', { x1: PX0, x2: PX1, y1: py(v), y2: py(v), stroke: '#efeff1', 'stroke-width': 2 }, pk);
-    label(pk, PX0 - 16, py(v) + 7, String(v), { 'font-size': 20, 'text-anchor': 'end', fill: COL.faint });
+
+  /* ---------- layouts ---------- */
+  const LAND = {
+    vb: '0 0 1600 900', f: 1,
+    c1: { base: [420, 330], rl: [1180, 330], s: 1 },
+    c2: { base: [300, 360], rl: [1300, 360], mid: [800, 360], s: 0.82, sMid: 0.82 },
+    cardFont: [30, 22], cardText: true,
+    arrow: { x0: 600, x1: 1000, y: 330, label: [['RLVR training', 795, 310]] },
+    samp: { titleY: 624, titles: ['8 samples on one hard problem', '8 samples on the same problem'], rows: 1, chipY: 668, chipW: 52, chipH: 44, chipGap: 8, chipFont: 22,
+      verdictY: 738, verdicts: ['✓ solved: one sample is correct', '✗ not solved: the same wrong answer'], fs: 22 },
+    formula: { x: 800, y: 112, size: 50 },
+    extLabels: false,
+    slider: { x0: 560, x1: 1040, y: 690, tickFont: 22, knobFont: 26 },
+    tok: { BY: 700, BH: 430, BW: 58, BG: 12, GX: [470, 800, 1130], hiW: 320, axis: [300, 1300], letter: 46, descFont: 20,
+      desc: ['both models like it', 'base likes it, RLVR removed it', 'neither model supports it'], valFont: 19,
+      legend: { x: 300, y: 150, dx: [0, 130, 280, 520], dy: [0, 0, 0, 0], font: 21 },
+      formula: { x: 1300, y: 95, size: 42, anchor: 'end' }, aRead: [1300, 150, 'end'], tRead: [1300, 182, 'end'], readFont: 22 },
+    pk: { X0: 300, X1: 1280, Y0: 700, Y1: 140, tick: 20, title: 22, yTitleX: 230, endInside: false, box: [330, 150, 290, 22] },
+  };
+  const PORT = {
+    vb: '0 0 900 1040', f: 1.3,
+    c1: { base: [225, 300], rl: [675, 300], s: 0.82 },
+    c2: { base: [150, 410], rl: [750, 410], mid: [450, 410], s: 0.52, sMid: 0.74 },
+    cardFont: [40, 30], cardText: true,
+    arrow: { x0: 372, x1: 528, y: 300, label: [['RLVR', 450, 246], ['training', 450, 280]] },
+    samp: { titleY: 576, titles: ['8 samples, one hard problem', '8 samples, same problem'], rows: 2, chipY: 638, chipW: 62, chipH: 50, chipGap: 10, chipFont: 27,
+      verdictY: 772, verdicts: ['✓ solved (1 of 8)', '✗ not solved'], fs: 27 },
+    formula: { x: 450, y: 120, size: 42 },
+    extLabels: true,
+    slider: { x0: 150, x1: 750, y: 760, tickFont: 28, knobFont: 34 },
+    tok: { BY: 780, BH: 440, BW: 52, BG: 10, GX: [170, 450, 730], hiW: 262, axis: [40, 860], letter: 54, descFont: 25,
+      desc: ['both models', 'base only', 'neither model'], valFont: 22,
+      legend: { x: 70, y: 196, dx: [0, 0, 420, 420], dy: [0, 40, 0, 40], font: 26 },
+      formula: { x: 450, y: 92, size: 46, anchor: 'middle' }, aRead: [300, 146, 'middle'], tRead: [600, 146, 'middle'], readFont: 30 },
+    pk: { X0: 150, X1: 830, Y0: 770, Y1: 170, tick: 25, title: 27, yTitleX: 62, endInside: true, box: [175, 200, 300, 27] },
+  };
+
+  let L, S;   // current layout, scene nodes
+
+  function build() {
+    L = MQ.matches ? PORT : LAND;
+    svg.innerHTML = '';
+    svg.setAttribute('viewBox', L.vb);
+    const f = L.f;
+    S = {};
+
+    /* ===== chapter 1 + 2: model cards ===== */
+    function card(name, sub) {
+      const g = el('g', {});
+      el('rect', { x: -160, y: -160, width: 320, height: 320, rx: 22, fill: '#fff', stroke: COL.line, 'stroke-width': 2 }, g);
+      const cells = [];
+      for (let i = 0; i < N * N; i++) {
+        const x = -GW / 2 + (i % N) * (CELL + GAP), y = -GW / 2 + Math.floor(i / N) * (CELL + GAP);
+        cells.push(el('rect', { x, y, width: CELL, height: CELL, rx: 6 }, g));
+      }
+      const txt = el('g', {}, g);
+      label(txt, 0, 160 + L.cardFont[0] * 1.5, name, { 'font-size': L.cardFont[0], fill: COL.ink, 'font-weight': 700 });
+      label(txt, 0, 160 + L.cardFont[0] * 1.5 + L.cardFont[1] * 1.45, sub, { 'font-size': L.cardFont[1] });
+      return { g, cells, txt };
+    }
+    S.cBase = card('Base model', 'Qwen2.5-7B');
+    S.cRL = card('RLVR policy', 'SimpleRL-Zoo-7B');
+    S.cMid = card('', '');
+    S.cBase.cells.forEach((c, i) => c.setAttribute('fill', baseCol(W0[i])));
+    S.cRL.cells.forEach((c, i) => c.setAttribute('fill', rlCol(W1[i])));
+    if (!L.extLabels) {
+      math(S.cMid.txt, 0, 210, 40, [['W', 'i'], ['(', 'r'], ['α', 'i'], [')', 'r']], { 'text-anchor': 'middle' });
+      label(S.cMid.txt, 0, 244, 'one model', { 'font-size': 22 });
+      S.tagBase = label(S.cBase.g, 0, -184, 'α = 0', { 'font-size': 32, class: 'serif', 'font-style': 'italic', fill: COL.ink });
+      S.tagRL = label(S.cRL.g, 0, -184, 'α = 1', { 'font-size': 32, class: 'serif', 'font-style': 'italic', fill: COL.ink });
+    } else {
+      // portrait: labels outside the (small) cards so they keep a readable size
+      const c2 = L.c2, below = c2.mid[1] + 160 * c2.sMid + 46, above = c2.mid[1] - 160 * c2.sMid - 26;
+      S.ext = el('g', {});
+      label(S.ext, c2.base[0], below, 'Base', { 'font-size': 32, fill: COL.ink, 'font-weight': 700 });
+      label(S.ext, c2.rl[0], below, 'RLVR', { 'font-size': 32, fill: COL.ink, 'font-weight': 700 });
+      math(S.ext, c2.mid[0], below + 4, 40, [['W', 'i'], ['(', 'r'], ['α', 'i'], [')', 'r']], { 'text-anchor': 'middle' });
+      label(S.ext, c2.mid[0], below + 40, 'one model', { 'font-size': 26 });
+      S.tagBase = label(S.ext, c2.base[0], above + 20, 'α = 0', { 'font-size': 36, class: 'serif', 'font-style': 'italic', fill: COL.ink });
+      S.tagRL = label(S.ext, c2.rl[0], above + 20, 'α = 1', { 'font-size': 36, class: 'serif', 'font-style': 'italic', fill: COL.ink });
+    }
+
+    // ch1: training arrow
+    const A = L.arrow;
+    S.arrow = el('g', {});
+    S.arrowLen = A.x1 - A.x0 - 10;
+    S.arrowLine = el('path', { d: `M ${A.x0} ${A.y} L ${A.x1 - 10} ${A.y}`, stroke: COL.muted, 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round', 'stroke-dasharray': S.arrowLen, 'stroke-dashoffset': S.arrowLen }, S.arrow);
+    S.arrowHead = el('path', { d: `M ${A.x1 - 25} ${A.y - 14} L ${A.x1} ${A.y} L ${A.x1 - 25} ${A.y + 14}`, stroke: COL.muted, 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, S.arrow);
+    S.arrowTxt = el('g', {}, S.arrow);
+    A.label.forEach(([s, x, y]) => label(S.arrowTxt, x, y, s, { 'font-size': 26 * (f > 1 ? 1.15 : 1), fill: COL.ink }));
+
+    // ch1: sampled answers
+    const SP = L.samp;
+    S.samples = el('g', {});
+    function chips(cx, list) {
+      const out = [], perRow = list.length / SP.rows;
+      const total = perRow * SP.chipW + (perRow - 1) * SP.chipGap;
+      list.forEach((a, i) => {
+        const col = i % perRow, row = Math.floor(i / perRow);
+        const g = el('g', { transform: `translate(${cx - total / 2 + col * (SP.chipW + SP.chipGap) + SP.chipW / 2}, ${SP.chipY + row * (SP.chipH + 12)})` }, S.samples);
+        const ok = a === CORRECT;
+        el('rect', { x: -SP.chipW / 2, y: -SP.chipH / 2, width: SP.chipW, height: SP.chipH, rx: 10, fill: ok ? '#eef8f0' : COL.soft, stroke: ok ? COL.good : COL.line, 'stroke-width': ok ? 3 : 1.5 }, g);
+        const t = el('text', { x: 0, y: SP.chipFont * 0.36, 'text-anchor': 'middle', 'font-size': SP.chipFont, fill: ok ? COL.good : COL.ink, 'font-weight': ok ? 700 : 400 }, g);
+        t.textContent = a;
+        out.push(g);
+      });
+      return out;
+    }
+    const cxB = L.c1.base[0], cxR = L.c1.rl[0];
+    S.sampTitles = [label(S.samples, cxB, SP.titleY, SP.titles[0], { 'font-size': SP.fs, fill: COL.ink }), label(S.samples, cxR, SP.titleY, SP.titles[1], { 'font-size': SP.fs, fill: COL.ink })];
+    S.chipsB = chips(cxB, ANS.base); S.chipsR = chips(cxR, ANS.rl);
+    S.verdicts = [label(S.samples, cxB, SP.verdictY, SP.verdicts[0], { 'font-size': SP.fs + 1, fill: COL.good, 'font-weight': 700 }),
+      label(S.samples, cxR, SP.verdictY, SP.verdicts[1], { 'font-size': SP.fs + 1, fill: COL.warm, 'font-weight': 700 })];
+
+    // ch2: formula + slider
+    const F = L.formula;
+    S.formula = math(svg, F.x, F.y, F.size, [['W', 'i'], ['(', 'r'], ['α', 'i'], [') = ', 'r'], ['W', 'i'], ['base', 'sub'], [' + ', 'r'], ['α', 'i'],
+      [' (', 'r'], ['W', 'i'], ['RL', 'sub'], [' − ', 'r'], ['W', 'i'], ['base', 'sub'], [')', 'r']], { 'text-anchor': 'middle' });
+    const SL = L.slider;
+    S.slider = el('g', {});
+    el('line', { x1: SL.x0, x2: SL.x1, y1: SL.y, y2: SL.y, stroke: COL.line, 'stroke-width': 8, 'stroke-linecap': 'round' }, S.slider);
+    S.fill = el('line', { x1: SL.x0, x2: SL.x0, y1: SL.y, y2: SL.y, stroke: COL.a50, 'stroke-width': 8, 'stroke-linecap': 'round' }, S.slider);
+    S.ticks = ALPHAS.map((a, i) => {
+      const x = lerp(SL.x0, SL.x1, a);
+      const dot = el('circle', { cx: x, cy: SL.y, r: 6, fill: '#fff', stroke: ACOL[i], 'stroke-width': 3 }, S.slider);
+      const t = label(S.slider, x, SL.y + SL.tickFont * 2.1, String(a), { 'font-size': SL.tickFont });
+      return { dot, t };
+    });
+    S.knob = el('circle', { cx: SL.x0, cy: SL.y, r: 17, fill: '#fff', stroke: COL.a50, 'stroke-width': 5 }, S.slider);
+    S.knobTxt = label(S.slider, SL.x0, SL.y - 34, '', { 'font-size': SL.knobFont, class: 'serif', 'font-style': 'italic', fill: COL.ink });
+
+    /* ===== chapter 3: token bars ===== */
+    const T = L.tok;
+    S.tok = el('g', {});
+    S.hiB = el('rect', { x: T.GX[1] - T.hiW / 2, y: T.BY - T.BH - 20, width: T.hiW, height: T.BH + T.descFont * 4.8, rx: 18, fill: '#eef4fc', opacity: 0 }, S.tok);
+    S.hiD = el('rect', { x: T.GX[2] - T.hiW / 2, y: T.BY - T.BH - 20, width: T.hiW, height: T.BH + T.descFont * 4.8, rx: 18, fill: '#fbeee6', opacity: 0 }, S.tok);
+    el('line', { x1: T.axis[0], x2: T.axis[1], y1: T.BY, y2: T.BY, stroke: '#c7c7cc', 'stroke-width': 2 }, S.tok);
+    const BCOL = [COL.a0, COL.a100, COL.a50, COL.warm];
+    S.bars = ['A', 'B', 'D'].map((name, g) => {
+      const gx = T.GX[g], x0 = gx - (4 * T.BW + 3 * T.BG) / 2;
+      const bs = BCOL.map((c, j) => {
+        const rect = el('rect', { x: x0 + j * (T.BW + T.BG), y: T.BY, width: T.BW, height: 0, rx: 5, fill: c }, S.tok);
+        const t = el('text', { x: x0 + j * (T.BW + T.BG) + T.BW / 2, y: T.BY - 8, 'text-anchor': 'middle', 'font-size': T.valFont, fill: COL.ink, opacity: 0 }, S.tok);
+        return { rect, t };
+      });
+      math(S.tok, gx, T.BY + T.letter * 1.12, T.letter, [[name, 'i']], { 'text-anchor': 'middle' });
+      label(S.tok, gx, T.BY + T.letter * 1.12 + T.descFont * 1.6, T.desc[g], { 'font-size': T.descFont });
+      return bs;
+    });
+    const LG = T.legend;
+    const lg = el('g', { transform: `translate(${LG.x}, ${LG.y})` }, S.tok);
+    [['Base', COL.a0], ['RLVR', COL.a100], ['Interpolated (α)', COL.a50], ['RLVR at temperature T', COL.warm]].forEach(([s, c], i) => {
+      const g = el('g', { transform: `translate(${LG.dx[i]}, ${LG.dy[i]})` }, lg);
+      el('rect', { x: 0, y: -LG.font * 0.76, width: LG.font * 0.95, height: LG.font * 0.95, rx: 4, fill: c }, g);
+      const tt = el('text', { x: LG.font * 1.4, y: 1, 'font-size': LG.font, fill: COL.muted }, g); tt.textContent = s;
+    });
+    const TF = T.formula;
+    S.tokFormula = math(S.tok, TF.x, TF.y, TF.size, [['π', 'i'], ['α', 'subi'], [' ∝ ', 'r'], ['π', 'i'], ['0', 'sub'], ['1−α', 'supi'], [' ', 'r'], ['π', 'i'], ['1', 'sub'], ['α', 'supi']], { 'text-anchor': TF.anchor });
+    S.tokA = label(S.tok, T.aRead[0], T.aRead[1], '', { 'font-size': T.readFont, 'text-anchor': T.aRead[2], class: 'serif', 'font-style': 'italic', fill: COL.a50 });
+    S.tokT = label(S.tok, T.tRead[0], T.tRead[1], '', { 'font-size': T.readFont, 'text-anchor': T.tRead[2], class: 'serif', 'font-style': 'italic', fill: COL.warm });
+
+    /* ===== chapter 4: pass@k curves (measured, Minerva) ===== */
+    const K = L.pk;
+    S.pk = el('g', {});
+    const YMIN = 20, YMAX = 70;
+    const px = (k) => K.X0 + Math.log2(k) / 7 * (K.X1 - K.X0);
+    const py = (v) => K.Y0 - (v - YMIN) / (YMAX - YMIN) * (K.Y0 - K.Y1);
+    for (let v = 20; v <= 70; v += 10) {
+      el('line', { x1: K.X0, x2: K.X1, y1: py(v), y2: py(v), stroke: '#efeff1', 'stroke-width': 2 }, S.pk);
+      label(S.pk, K.X0 - 16, py(v) + K.tick * 0.35, String(v), { 'font-size': K.tick, 'text-anchor': 'end', fill: COL.faint });
+    }
+    M.k.forEach((k) => label(S.pk, px(k), K.Y0 + K.tick * 1.7, String(k), { 'font-size': K.tick, fill: COL.faint }));
+    label(S.pk, (K.X0 + K.X1) / 2, K.Y0 + K.tick * 1.7 + K.title * 1.8, 'samples per problem, k', { 'font-size': K.title });
+    label(S.pk, K.yTitleX, (K.Y0 + K.Y1) / 2, 'pass@k on Minerva (%)', { 'font-size': K.title, transform: `rotate(-90 ${K.yTitleX} ${(K.Y0 + K.Y1) / 2})` });
+    const clip = el('clipPath', { id: 'pkclip' }, el('defs', {}, S.pk));
+    S.clipR = el('rect', { x: K.X0 - 20, y: 0, width: 0, height: 1100 }, clip);
+    S.pkW = K.X1 - K.X0 + 40;
+    const curveG = el('g', { 'clip-path': 'url(#pkclip)' }, S.pk);
+    const path = (arr) => M.k.map((k, i) => `${i ? 'L' : 'M'} ${px(k).toFixed(1)} ${py(arr[i]).toFixed(1)}`).join(' ');
+    [['base', COL.a0, '10 9', 4], ['zoo', COL.a100, '10 9', 4], ['a25', COL.a25, '', 6]].forEach(([key, c, dash, w]) => {
+      el('path', { d: path(M[key]), stroke: c, 'stroke-width': w, fill: 'none', 'stroke-dasharray': dash, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, curveG);
+      M.k.forEach((k, i) => el('circle', { cx: px(k), cy: py(M[key][i]), r: key === 'a25' ? 7 : 5.5, fill: c, stroke: '#fff', 'stroke-width': 2 }, curveG));
+    });
+    const last = M.k.length - 1;
+    S.endLab = el('g', { opacity: 0 }, S.pk);
+    if (K.endInside) {
+      label(S.endLab, K.X1, py(M.a25[last]) - 24, `α = 0.25 & base ${fmt(M.a25[last])}`, { 'font-size': K.tick, 'text-anchor': 'end', fill: COL.a25, 'font-weight': 700 });
+      label(S.endLab, K.X1, py(M.zoo[last]) + 40, `RLVR ${fmt(M.zoo[last])}`, { 'font-size': K.tick, 'text-anchor': 'end', fill: COL.a100, 'font-weight': 700 });
+    } else {
+      label(S.endLab, K.X1 + 18, py(M.a25[last]) - 4, `α = 0.25 and base: ${fmt(M.a25[last])}`, { 'font-size': 22, 'text-anchor': 'start', fill: COL.a25, 'font-weight': 700 });
+      label(S.endLab, K.X1 + 18, py(M.zoo[last]) + 8, `RLVR: ${fmt(M.zoo[last])}`, { 'font-size': 22, 'text-anchor': 'start', fill: COL.a100, 'font-weight': 700 });
+    }
+    const [bx, by, bw, bf] = K.box;
+    S.startLab = el('g', { opacity: 0, transform: `translate(${bx}, ${by})` }, S.pk);
+    el('rect', { x: -14, y: -bf * 1.4, width: bw, height: bf * 6.6, rx: 14, fill: '#fff', stroke: COL.line, 'stroke-width': 2 }, S.startLab);
+    label(S.startLab, 0, 0, 'pass@1 (k = 1)', { 'font-size': bf * 0.95, 'text-anchor': 'start', fill: COL.muted });
+    [['RLVR', M.zoo[0], COL.a100], ['α = 0.25', M.a25[0], COL.a25], ['Base', M.base[0], COL.a0]].forEach(([n, v, c], i) => {
+      const yy = bf * 1.55 + i * bf * 1.45;
+      el('circle', { cx: 8, cy: yy - bf * 0.32, r: bf * 0.32, fill: c }, S.startLab);
+      label(S.startLab, bf * 1.2, yy, n, { 'font-size': bf, 'text-anchor': 'start', fill: COL.ink });
+      label(S.startLab, bw - 40, yy, fmt(v), { 'font-size': bf, 'text-anchor': 'end', fill: COL.ink, 'font-weight': 700 });
+    });
+    // samples-to-target annotation: alpha 0.25 reaches RLVR pass@128 at k = 18 (paper Table 3)
+    const tgt = M.zoo[last], K18 = D.samples.pass128.minerva_math[1];
+    S.ann = el('g', { opacity: 0 }, S.pk);
+    el('line', { x1: px(1), x2: px(128), y1: py(tgt), y2: py(tgt), stroke: COL.warm, 'stroke-width': 2.5, 'stroke-dasharray': '3 7', 'stroke-linecap': 'round' }, S.ann);
+    el('line', { x1: px(K18), x2: px(K18), y1: py(tgt), y2: K.Y0, stroke: COL.a25, 'stroke-width': 2.5, 'stroke-dasharray': '3 7', 'stroke-linecap': 'round' }, S.ann);
+    el('circle', { cx: px(K18), cy: py(tgt), r: 10, fill: '#fff', stroke: COL.a25, 'stroke-width': 4 }, S.ann);
+    label(S.ann, px(K18) - 14, K.Y0 - 18, `${K18} samples`, { 'font-size': K.tick + 4, fill: COL.a25, 'font-weight': 700, 'text-anchor': 'end' });
+    label(S.ann, px(128) - 14, K.Y0 - 18, '128 samples', { 'font-size': K.tick + 4, fill: COL.a100, 'font-weight': 700, 'text-anchor': 'end' });
+    capNow = -1;
   }
-  M.k.forEach((k) => label(pk, px(k), PY0 + 34, String(k), { 'font-size': 20, fill: COL.faint }));
-  label(pk, (PX0 + PX1) / 2, PY0 + 74, 'samples per problem, k', { 'font-size': 22 });
-  label(pk, PX0 - 70, (PY0 + PY1) / 2, 'pass@k on Minerva (%)', { 'font-size': 22, transform: `rotate(-90 ${PX0 - 70} ${(PY0 + PY1) / 2})` });
-  const clip = el('clipPath', { id: 'pkclip' }, el('defs', {}, pk));
-  const clipR = el('rect', { x: PX0 - 20, y: 0, width: 0, height: 900 }, clip);
-  const curveG = el('g', { 'clip-path': 'url(#pkclip)' }, pk);
-  const path = (arr) => M.k.map((k, i) => `${i ? 'L' : 'M'} ${px(k).toFixed(1)} ${py(arr[i]).toFixed(1)}`).join(' ');
-  const SER = [['base', COL.a0, '10 9', 4, 'Base'], ['zoo', COL.a100, '10 9', 4, 'RLVR'], ['a25', COL.a25, '', 6, 'α = 0.25']];
-  SER.forEach(([key, c, dash, w]) => {
-    el('path', { d: path(M[key]), stroke: c, 'stroke-width': w, fill: 'none', 'stroke-dasharray': dash, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, curveG);
-    M.k.forEach((k, i) => el('circle', { cx: px(k), cy: py(M[key][i]), r: key === 'a25' ? 7 : 5.5, fill: c, stroke: '#fff', 'stroke-width': 2 }, curveG));
-  });
-  const last = M.k.length - 1;
-  const endLab = el('g', { opacity: 0 }, pk);
-  label(endLab, PX1 + 18, py(M.a25[last]) - 4, `α = 0.25 and base: ${fmt(M.a25[last])}`, { 'font-size': 22, 'text-anchor': 'start', fill: COL.a25, 'font-weight': 700 });
-  label(endLab, PX1 + 18, py(M.zoo[last]) + 8, `RLVR: ${fmt(M.zoo[last])}`, { 'font-size': 22, 'text-anchor': 'start', fill: COL.a100, 'font-weight': 700 });
-  const startLab = el('g', { opacity: 0, transform: `translate(${PX0 + 30}, ${PY1 + 10})` }, pk);
-  el('rect', { x: -14, y: -30, width: 290, height: 150, rx: 14, fill: '#fff', stroke: COL.line, 'stroke-width': 2 }, startLab);
-  label(startLab, 0, 0, 'pass@1 (k = 1)', { 'font-size': 21, 'text-anchor': 'start', fill: COL.muted });
-  [['RLVR', M.zoo[0], COL.a100], ['α = 0.25', M.a25[0], COL.a25], ['Base', M.base[0], COL.a0]].forEach(([n, v, c], i) => {
-    el('circle', { cx: 8, cy: 34 + i * 32 - 7, r: 7, fill: c }, startLab);
-    label(startLab, 26, 34 + i * 32, n, { 'font-size': 22, 'text-anchor': 'start', fill: COL.ink });
-    label(startLab, 250, 34 + i * 32, fmt(v), { 'font-size': 22, 'text-anchor': 'end', fill: COL.ink, 'font-weight': 700 });
-  });
-  // samples-to-target annotation: alpha 0.25 reaches RLVR pass@128 at k = 18 (paper Table 3)
-  const tgt = M.zoo[last], K18 = D.samples.pass128.minerva_math[1];
-  const ann = el('g', { opacity: 0 }, pk);
-  el('line', { x1: px(1), x2: px(128), y1: py(tgt), y2: py(tgt), stroke: COL.warm, 'stroke-width': 2.5, 'stroke-dasharray': '3 7', 'stroke-linecap': 'round' }, ann);
-  el('line', { x1: px(K18), x2: px(K18), y1: py(tgt), y2: PY0, stroke: COL.a25, 'stroke-width': 2.5, 'stroke-dasharray': '3 7', 'stroke-linecap': 'round' }, ann);
-  el('circle', { cx: px(K18), cy: py(tgt), r: 10, fill: '#fff', stroke: COL.a25, 'stroke-width': 4 }, ann);
-  const annTxt = label(ann, px(K18) - 14, PY0 - 18, `${K18} samples`, { 'font-size': 24, fill: COL.a25, 'font-weight': 700, 'text-anchor': 'end' });
-  label(ann, px(128) - 14, PY0 - 18, '128 samples', { 'font-size': 24, fill: COL.a100, 'font-weight': 700, 'text-anchor': 'end' });
 
   /* ---------- render ---------- */
   function render(t) {
+    const c1 = L.c1, c2 = L.c2;
     // chapter 1 / 2 cards
     const c12 = 1 - seg(t, 15, 15.6);
     const move = seg(t, 7, 8.2);
-    const sc = lerp(1, 0.82, move);
-    set(cBase.g, { transform: `translate(${lerp(420, 300, move)}, ${lerp(330, 360, move)}) scale(${sc})`, opacity: seg(t, 0, 0.6) * c12 });
-    set(cRL.g, { transform: `translate(${lerp(1180, 1300, move)}, ${lerp(330, 360, move)}) scale(${sc})`, opacity: seg(t, 0.8, 1.6) * c12 });
-    set(cMid.g, { transform: `translate(800, 360) scale(${lerp(0.6, 0.82, seg(t, 7.8, 8.6))})`, opacity: seg(t, 7.8, 8.6) * c12 });
-    const tagO = seg(t, 11.2, 11.8) * c12; tagBase.setAttribute('opacity', tagO); tagRL.setAttribute('opacity', tagO);
+    const sc = lerp(c1.s, c2.s, move);
+    set(S.cBase.g, { transform: `translate(${lerp(c1.base[0], c2.base[0], move)}, ${lerp(c1.base[1], c2.base[1], move)}) scale(${sc})`, opacity: seg(t, 0, 0.6) * c12 });
+    set(S.cRL.g, { transform: `translate(${lerp(c1.rl[0], c2.rl[0], move)}, ${lerp(c1.rl[1], c2.rl[1], move)}) scale(${sc})`, opacity: seg(t, 0.8, 1.6) * c12 });
+    set(S.cMid.g, { transform: `translate(${c2.mid[0]}, ${c2.mid[1]}) scale(${lerp(c2.sMid * 0.7, c2.sMid, seg(t, 7.8, 8.6))})`, opacity: seg(t, 7.8, 8.6) * c12 });
+    if (L.extLabels) {
+      const out = 1 - seg(t, 7, 7.6);
+      S.cBase.txt.setAttribute('opacity', out); S.cRL.txt.setAttribute('opacity', out);
+      S.ext.setAttribute('opacity', seg(t, 8.2, 8.8) * c12);
+    }
+    const tagO = seg(t, 11.2, 11.8) * (L.extLabels ? 1 : c12); S.tagBase.setAttribute('opacity', tagO); S.tagRL.setAttribute('opacity', tagO);
 
-    set(arrow, { opacity: 1 - seg(t, 6.8, 7.4) });
-    arrowLine.setAttribute('stroke-dashoffset', 400 * (1 - seg(t, 0.8, 2.0)));
-    arrowHead.setAttribute('opacity', seg(t, 1.8, 2.1)); arrowTxt.setAttribute('opacity', seg(t, 1.4, 2.2));
+    set(S.arrow, { opacity: 1 - seg(t, 6.8, 7.4) });
+    S.arrowLine.setAttribute('stroke-dashoffset', S.arrowLen * (1 - seg(t, 0.8, 2.0)));
+    S.arrowHead.setAttribute('opacity', seg(t, 1.8, 2.1)); S.arrowTxt.setAttribute('opacity', seg(t, 1.4, 2.2));
 
-    set(samples, { opacity: 1 - seg(t, 6.8, 7.4) });
-    sampTitleB.setAttribute('opacity', seg(t, 3.4, 3.9)); sampTitleR.setAttribute('opacity', seg(t, 3.4, 3.9));
-    chipsB.forEach((g, i) => g.setAttribute('opacity', seg(t, 3.8 + i * 0.22, 4.0 + i * 0.22)));
-    chipsR.forEach((g, i) => g.setAttribute('opacity', seg(t, 3.8 + i * 0.22, 4.0 + i * 0.22)));
-    verdictB.setAttribute('opacity', seg(t, 5.8, 6.2)); verdictR.setAttribute('opacity', seg(t, 5.8, 6.2));
+    set(S.samples, { opacity: 1 - seg(t, 6.8, 7.4) });
+    S.sampTitles.forEach((n) => n.setAttribute('opacity', seg(t, 3.4, 3.9)));
+    S.chipsB.forEach((g, i) => g.setAttribute('opacity', seg(t, 3.8 + i * 0.22, 4.0 + i * 0.22)));
+    S.chipsR.forEach((g, i) => g.setAttribute('opacity', seg(t, 3.8 + i * 0.22, 4.0 + i * 0.22)));
+    S.verdicts.forEach((n) => n.setAttribute('opacity', seg(t, 5.8, 6.2)));
 
     // alpha path for chapter 2
     let a = 0;
     if (t >= 9 && t < 11) a = seg(t, 9, 11); else if (t >= 11 && t < 11.4) a = 1; else if (t >= 11.4) a = lerp(1, 0.25, seg(t, 11.4, 12.6));
-    cMid.cells.forEach((c, i) => c.setAttribute('fill', mix(baseCol(W0[i]), rlCol(W1[i]), a)));
-    formula.setAttribute('opacity', win(t, 7.8, 15.4, 0.6));
-    slider.setAttribute('opacity', win(t, 8.2, 15.4, 0.6));
-    const kx = lerp(SX0, SX1, a);
-    set(knob, { cx: kx }); set(fill, { x2: kx }); set(knobTxt, { x: kx }); knobTxt.textContent = `α = ${a.toFixed(2)}`;
-    ticks.forEach(({ dot, t: tt }, i) => { const on = Math.abs(a - ALPHAS[i]) < 0.02; dot.setAttribute('r', on ? 9 : 6); tt.setAttribute('fill', on ? COL.ink : COL.muted); tt.setAttribute('font-weight', on ? 700 : 400); });
+    S.cMid.cells.forEach((c, i) => c.setAttribute('fill', mix(baseCol(W0[i]), rlCol(W1[i]), a)));
+    S.formula.setAttribute('opacity', win(t, 7.8, 15.4, 0.6));
+    S.slider.setAttribute('opacity', win(t, 8.2, 15.4, 0.6));
+    const kx = lerp(L.slider.x0, L.slider.x1, a);
+    set(S.knob, { cx: kx }); set(S.fill, { x2: kx }); set(S.knobTxt, { x: kx }); S.knobTxt.textContent = `α = ${a.toFixed(2)}`;
+    S.ticks.forEach(({ dot, t: tt }, i) => { const on = Math.abs(a - ALPHAS[i]) < 0.02; dot.setAttribute('r', on ? 9 : 6); tt.setAttribute('fill', on ? COL.ink : COL.muted); tt.setAttribute('font-weight', on ? 700 : 400); });
 
     // chapter 3
-    const c3 = win(t, 15.4, 24, 0.6);
-    tok.setAttribute('opacity', c3);
+    const T = L.tok, c3 = win(t, 15.4, 24, 0.6);
+    S.tok.setAttribute('opacity', c3);
     const g01 = seg(t, 15.8, 16.9), aa = 0.5 * seg(t, 17.2, 18.8), gm = seg(t, 17.0, 17.4), TT = lerp(1, 2, seg(t, 20.2, 21.8)), tm = seg(t, 20.0, 20.4);
-    const vals = [P0, P1, geo(aa), temp(TT)];
-    const vis = [g01, g01, gm, tm];
-    bars.forEach((bs, g) => bs.forEach(({ rect, t: tt }, j) => {
-      const h = vals[j][g] * BH * vis[j];
-      set(rect, { y: BY - h, height: h });
-      set(tt, { y: BY - h - 10, opacity: vis[j] > 0.95 ? 1 : 0 });
+    const vals = [P0, P1, geo(aa), temp(TT)], vis = [g01, g01, gm, tm];
+    S.bars.forEach((bs, g) => bs.forEach(({ rect, t: tt }, j) => {
+      const h = vals[j][g] * T.BH * vis[j];
+      set(rect, { y: T.BY - h, height: h });
+      set(tt, { y: T.BY - h - 10, opacity: vis[j] > 0.95 ? 1 : 0 });
       tt.textContent = vals[j][g] < 0.1 ? vals[j][g].toFixed(3).replace(/0$/, '') : vals[j][g].toFixed(2);
     }));
-    tokFormula.setAttribute('opacity', seg(t, 17.0, 17.6));
-    tokA.setAttribute('opacity', gm); tokA.textContent = `α = ${aa.toFixed(2)}`;
-    tokT.setAttribute('opacity', tm); tokT.textContent = `T = ${TT.toFixed(2)}`;
-    hiB.setAttribute('opacity', win(t, 18.6, 20.4, 0.5));
-    hiD.setAttribute('opacity', seg(t, 21.4, 22) * c3);
+    S.tokFormula.setAttribute('opacity', seg(t, 17.0, 17.6));
+    S.tokA.setAttribute('opacity', gm); S.tokA.textContent = `α = ${aa.toFixed(2)}`;
+    S.tokT.setAttribute('opacity', tm); S.tokT.textContent = `T = ${TT.toFixed(2)}`;
+    S.hiB.setAttribute('opacity', win(t, 18.6, 20.4, 0.5));
+    S.hiD.setAttribute('opacity', seg(t, 21.4, 22) * c3);
 
     // chapter 4
-    pk.setAttribute('opacity', win(t, 24.4, TOTAL, 0.6));
-    clipR.setAttribute('width', (PX1 - PX0 + 40) * seg(t, 24.8, 27.6));
-    startLab.setAttribute('opacity', seg(t, 25.2, 25.8));
-    endLab.setAttribute('opacity', seg(t, 27.4, 28));
-    ann.setAttribute('opacity', seg(t, 28.6, 29.4));
+    S.pk.setAttribute('opacity', win(t, 24.4, TOTAL, 0.6));
+    S.clipR.setAttribute('width', S.pkW * seg(t, 24.8, 27.6));
+    S.startLab.setAttribute('opacity', seg(t, 25.2, 25.8));
+    S.endLab.setAttribute('opacity', seg(t, 27.4, 28));
+    S.ann.setAttribute('opacity', seg(t, 28.6, 29.4));
 
     // caption
     const ci = CAPTIONS.findIndex(([a0, b0]) => t >= a0 && t < b0);
@@ -295,7 +378,9 @@
   chapterBtns.forEach((b, i) => b.addEventListener('click', () => { t = CH[i] + 0.01; render(t); setPaused(false); }));
   progress.addEventListener('click', (e) => { const r0 = progress.getBoundingClientRect(); t = clamp((e.clientX - r0.left) / r0.width) * TOTAL; render(t); });
   new IntersectionObserver((es) => { visible = es[0].isIntersecting; }, { threshold: 0.15 }).observe(frame);
+  MQ.addEventListener('change', () => { build(); render(t); });
   window.teaserSeek = (s) => { t = s; render(t); setPaused(true); };   // for inspecting single frames
+  build();
   if (reduce) { t = CH[1] + 7.5; setPaused(true); }
   render(t);
   requestAnimationFrame(tick);
