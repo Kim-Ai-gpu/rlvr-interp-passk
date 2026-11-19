@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-<link rel="stylesheet" href="assets/style.css?v=8">
+<link rel="stylesheet" href="assets/style.css?v=9">
 </head>
 <body>
 
@@ -192,6 +192,47 @@ One number, <span class="m">α</span>, mixes the weights back toward the base mo
   </div>
 </div>
 
+<div class="section-head" id="try">
+  <h2>Try it on your own model pair</h2>
+  <p>Any RLVR model and the base model it was trained from (same architecture and tokenizer). No GPU needed to build the mix.</p>
+</div>
+<div class="try">
+  <div class="res-ctrl"><div class="seg" id="try-tab">
+    <button data-v="script" aria-pressed="true">Our script (streams, low RAM)</button><button data-v="hf" aria-pressed="false">Plain transformers</button></div></div>
+  <div class="code" data-pane="script">
+    <button class="pill copy">Copy</button>
+<pre><span class="c"># CPU is fine: tensors are mixed one at a time in fp32 and saved in fp16</span>
+git clone https://github.com/Kim-Ai-gpu/rlvr-interp-passk && cd rlvr-interp-passk
+pip install torch safetensors huggingface_hub
+
+python -m interp_passk.interpolate \
+    --base Qwen/Qwen2.5-7B --rl hkust-nlp/Qwen-2.5-7B-SimpleRL-Zoo \
+    --alpha 0.25 0.75 --out models          <span class="c"># -> models/a25, models/a75</span>
+
+vllm serve models/a25 --dtype float16      <span class="c"># serve like any other checkpoint</span></pre>
+  </div>
+  <div class="code" data-pane="hf" hidden>
+    <button class="pill copy">Copy</button>
+<pre>import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+base_id, rl_id, alpha = "Qwen/Qwen2.5-7B", "hkust-nlp/Qwen-2.5-7B-SimpleRL-Zoo", 0.25
+model = AutoModelForCausalLM.from_pretrained(base_id, dtype=torch.float32)
+rl = AutoModelForCausalLM.from_pretrained(rl_id, dtype=torch.float32).state_dict()
+with torch.no_grad():
+    for name, w in model.state_dict().items():
+        w.add_(alpha * (rl[name] - w))           <span class="c"># W_base + alpha (W_RL - W_base)</span>
+model.half().save_pretrained("mixed-a25")        <span class="c"># fp16 or fp32, never bf16</span>
+AutoTokenizer.from_pretrained(rl_id).save_pretrained("mixed-a25")</pre>
+    <p class="res-note" style="text-align:left">Holds both models in fp32 at once (about 60 GB of RAM for a 7B pair); the script on the other tab streams instead.</p>
+  </div>
+  <ul class="try-notes">
+    <li><b>Start with <span class="m">α</span> = 0.75</b> if you only want a free gain, or <b><span class="m">α</span> = 0.25</b> if you draw many samples and can verify answers.</li>
+    <li><b>Never store or serve the mix in bf16.</b> The RLVR update is about one bf16 step of the base weights, so rounding erases most of it.</li>
+    <li><b>Tried another pair?</b> Please <a href="https://github.com/Kim-Ai-gpu/rlvr-interp-passk/issues" target="_blank" rel="noopener">open an issue</a> with your numbers, whether it helps or not. Our results cover one 7B pair on math, so other families, scales, and domains are exactly what is missing.</li>
+  </ul>
+</div>
+
 <div class="section-head" id="limits">
   <h2>What it does not do</h2>
   <p>Stated up front in the paper.</p>
@@ -221,8 +262,8 @@ One number, <span class="m">α</span>, mixes the weights back toward the base mo
 
 <div class="tip" id="tip"></div>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-<script src="assets/data.js?v=8"></script>
-<script src="assets/teaser.js?v=8"></script>
-<script src="assets/charts.js?v=8"></script>
+<script src="assets/data.js?v=9"></script>
+<script src="assets/teaser.js?v=9"></script>
+<script src="assets/charts.js?v=9"></script>
 </body>
 </html>

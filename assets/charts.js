@@ -316,6 +316,12 @@
   html += '<tr class="mean"><td>Mean, w/o AIME24</td>' + sums.map(([a, b]) => `<td>${fmt(a / 5)} / ${fmt(b / 5)}</td>`).join('') + '</tr>';
   tbl.innerHTML = html;
 
+  segmented('try-tab', null, 'script', (v) => document.querySelectorAll('.code[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== v; }));
+  document.querySelectorAll('.code .copy').forEach((b) => b.addEventListener('click', () => {
+    const txt = b.parentElement.querySelector('pre').textContent;
+    navigator.clipboard.writeText(txt).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1400); }, () => {});
+  }));
+
   document.getElementById('copy-bib').addEventListener('click', (e) => {
     const b = e.currentTarget;
     navigator.clipboard.writeText(document.getElementById('bibtex').textContent).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1400); }, () => {});
